@@ -1,0 +1,22 @@
+[[package]]
+name = "polara"
+version = "0.7.2"
+description = "Fast and flexible recommender systems framework"
+category = "dev"
+optional = false
+python-versions = "*"
+develop = false
+
+[package.source]
+type = "git"
+url = "git@github.com:evfro/polara.git"
+reference = "master"
+resolved_reference = "86a5d247335242f31baf8fb68e472b651ae6770f"
+
+[metadata]
+lock-version = "1.1"
+python-versions = "^3.9"
+content-hash = "295beba4c35c713edb5184d97b6da84ac9ac768336d956503cdfc0878f5e394f"
+
+[metadata.files]
+polara = []
