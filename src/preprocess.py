@@ -1,14 +1,13 @@
 from typing import Tuple, Dict
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from loguru import logger
-
 from polara import get_movielens_data
 from polara.preprocessing.dataframes import reindex, leave_one_out
 
 
-def transform_indices(data, users, items):
+def transform_indices(data: pd.DataFrame, users: str, items: str):
     data_index = {}
     for entity, field in zip(['users', 'items'], [users, items]):
         idx, idx_map = to_numeric_id(data, field)
@@ -50,8 +49,7 @@ def get_train_test(data: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, Dict
 
 
 def get_holdout(data: pd.DataFrame, data_index) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    testset_, holdout_ = leave_one_out(
-    data, target='timestamp', sample_top=True, random_state=0)
+    testset_, holdout_ = leave_one_out(data, target='timestamp', sample_top=True, random_state=0)
 
     userid = data_index['users'].name
     test_users = pd.Index(
@@ -63,39 +61,39 @@ def get_holdout(data: pd.DataFrame, data_index) -> Tuple[pd.DataFrame, pd.DataFr
     )
     testset = (
         testset_
-        # reindex warm-start users for convenience
-        .assign(**{userid: lambda x: test_users.get_indexer(x[userid])})
-        .query(f'{userid} >= 0')
-        .sort_values('userid')
+            # reindex warm-start users for convenience
+            .assign(**{userid: lambda x: test_users.get_indexer(x[userid])})
+            .query(f'{userid} >= 0')
+            .sort_values('userid')
     )
     holdout = (
         holdout_
-        # reindex warm-start users for convenience
-        .assign(**{userid: lambda x: test_users.get_indexer(x[userid])})
-        .query(f'{userid} >= 0')
-        .sort_values('userid')
+            # reindex warm-start users for convenience
+            .assign(**{userid: lambda x: test_users.get_indexer(x[userid])})
+            .query(f'{userid} >= 0')
+            .sort_values('userid')
     )
 
     return testset, holdout
 
+
 def save_data(
-    train: pd.DataFrame, 
-    test: pd.DataFrame, 
-    holdout: pd.DataFrame,
-    data_root: str,
-    level: int
-    ):
+        train: pd.DataFrame,
+        test: pd.DataFrame,
+        holdout: pd.DataFrame,
+        data_root: str,
+        level: int
+) -> None:
     train.to_csv(data_root + f'train{level}level.csv', index=False)
     test.to_csv(data_root + f'test{level}level.csv', index=False)
     holdout.to_csv(data_root + f'holdout{level}level.csv', index=False)
 
 
 def train_test_split(
-    dataset_path: str = './data/data.zip', 
-    data_root: str = './data/',
-    save_files: bool = False
-    ):
-
+        dataset_path: str = './data/data.zip',
+        data_root: str = './data/',
+        save_files: bool = False
+):
     logger.info("start split dataset")
 
     mldata = get_movielens_data(dataset_path, include_time=True)
