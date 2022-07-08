@@ -119,6 +119,8 @@ outputs/
 #Idea
 .idea/
 
+# data
+/data
 
 #support files
 *.ru
