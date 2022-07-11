@@ -1,0 +1,6 @@
+re_split_data: False
+
+dataset:
+  dataset_path: './data/data.zip'
+  data_root: './data/'
+  save_files: False

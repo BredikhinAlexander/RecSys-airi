@@ -12,6 +12,7 @@ scipy = { version = "^1.8.1", python = "~3.9" }
 numba = { version = "^0.55.2", python = "~3.9" }
 requests = "^2.28.1"
 loguru = "^0.6.0"
+hydra-core = "^1.1.1"
 
 [tool.poetry.dev-dependencies]
 polara = {git = "git@github.com:evfro/polara.git", branch = "develop"}
