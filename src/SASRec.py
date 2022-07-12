@@ -241,7 +241,7 @@ def train_sasrec(data, cfg):
     return model, losses
 
 
-def evaluate_sasrec(model, data, device):
+def evaluate_sasrec(model, data, device) -> np.ndarray:
     model.eval()
     test_sequences = data_to_sequences(data)
     scores = []
