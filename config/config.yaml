@@ -21,4 +21,4 @@ SASRec:
     weight_decay: 1e-5
   num_epoch: 60
   model_save_path: './data/SASRec/SASRec.pt'
-  device: 'cuda'
+  device: 'cpu'
