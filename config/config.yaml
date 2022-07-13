@@ -1,6 +1,24 @@
-re_split_data: False
+re_split_data: True
 
 dataset:
   dataset_path: './data/data.zip'
   data_root: './data/'
   save_files: False
+
+SASRec:
+  model_params:
+    hidden_units: 50
+    max_len: 200
+    dropout_rate: 0.2
+    num_blocks: 2
+    num_heads: 1
+  batch_sampler_params:
+    batch_size: 128
+    max_len: 200
+    seed: 10
+  optimizer_params:
+    lr: 0.001
+    weight_decay: 1e-5
+  num_epoch: 60
+  model_save_path: './data/SASRec/SASRec.pt'
+  device: 'cpu'
