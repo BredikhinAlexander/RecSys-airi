@@ -29,3 +29,6 @@ TensorModel:
   num_iters: 5
   rating_plus: [8, 9]
   rating_minus: [0, 1]
+
+EASEModel:
+  reg_weight: 367

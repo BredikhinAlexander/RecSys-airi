@@ -17,6 +17,8 @@ hydra-core = "^1.1.1"
 optuna = "^2.10.1"
 sklearn = "^0.0"
 lightfm = "^1.16"
+hyperopt = "^0.2.7"
+catboost = "^1.0.6"
 
 [tool.poetry.dev-dependencies]
 polara = {git = "git@github.com:evfro/polara.git", branch = "develop"}

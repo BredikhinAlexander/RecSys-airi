@@ -23,58 +23,83 @@ def to_numeric_id(data, field):
     return idx, idx_map
 
 
-def split_data(data: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    test_timepoint = data['timestamp'].quantile(
-        q=0.95, interpolation='nearest')
-
-    test_data_ = data.query('timestamp >= @test_timepoint')
-
-    train_data_ = data.query(
-        'userid not in @test_data_.userid.unique() and timestamp < @test_timepoint'
+# Final train-test split
+def split_train_test_data(data, time_q=0.95, users='userid', items='movieid', time='timestamp'):
+    test_timepoint = data[time].quantile(
+        q=time_q, interpolation='nearest'
     )
-    return train_data_, test_data_
-
-
-def get_train_test(data: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, Dict]:
-    train_data_, test_data_ = split_data(data)
-
-    training, data_index = transform_indices(train_data_.copy(), 'userid', 'movieid')
-
+    test_region = data.query(f'{time} >= @test_timepoint')
+    test_users = test_region[users].unique()
+    train_data_ = data.query(
+        f'{users} not in @test_users and {time} < @test_timepoint'
+    )
+    training, data_index = transform_indices(train_data_.copy(), users, items)
+    test_data_ = pd.concat(
+        [
+            # add histories of test users before timepoint
+            data.query(f'{users} in @test_users and {time} < @test_timepoint'),
+            test_region
+        ],
+        axis = 0,
+        ignore_index = False
+    )
     test_data = reindex(test_data_, data_index['items'])
-
-    print(len(training), len(test_data))
-    print(len(training['userid'].unique()))
-    print(len(test_data['userid'].unique()))
     return training, test_data, data_index
 
 
-def get_holdout(data: pd.DataFrame, data_index) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    testset_, holdout_ = leave_one_out(data, target='timestamp', sample_top=True, random_state=0)
-
-    userid = data_index['users'].name
+# Final holdout split
+def split_holdout_data(test_data, users='userid', time='timestamp'):
+    testset_, holdout_ = leave_one_out(
+        test_data, target=time, sample_top=True, random_state=0
+    )
     test_users = pd.Index(
         # ensure test users are the same across testing data
-        np.intersect1d(
-            testset_[userid].unique(),
-            holdout_[userid].unique()
-        )
+        np.intersect1d(testset_[users].unique(), holdout_[users].unique()
+        ),
+        name = users
     )
     testset = (
         testset_
-            # reindex warm-start users for convenience
-            .assign(**{userid: lambda x: test_users.get_indexer(x[userid])})
-            .query(f'{userid} >= 0')
-            .sort_values('userid')
+        # reindex warm-start users for convenience
+        .assign(**{users: test_users.get_indexer(testset_[users])})
+        .query(f'{users} >= 0')
+        .sort_values(users)
     )
     holdout = (
         holdout_
-            # reindex warm-start users for convenience
-            .assign(**{userid: lambda x: test_users.get_indexer(x[userid])})
-            .query(f'{userid} >= 0')
-            .sort_values('userid')
+        # reindex warm-start users for convenience
+        .assign(**{users: test_users.get_indexer(holdout_[users])})
+        .query(f'{users} >= 0')
+        .sort_values(users)
     )
+    return testset, holdout, test_users
 
-    return testset, holdout
+
+def split_stage_data(
+    data, time_q=0.8, users='userid', items='movieid', time='timestamp'
+):
+    stage_timepoint = data[time].quantile(
+        q=time_q, interpolation='nearest'
+    )
+    stage2_region = data.query(f'{time} >= @stage_timepoint')
+    stage2_users = stage2_region[users].unique()
+    stage1_train = data.query(
+        f'{users} not in @stage2_users and {time} < @stage_timepoint'
+    )
+    # store known items to exclude cold start problem from candidate generation step
+    known_items = stage1_train[items].unique()
+    stage2_predict = data.query(
+        f'{users} in @stage2_users and {items} in @known_items and {time} < @stage_timepoint'
+    )
+    # stage 2 data may still contain cold items - stage 2 model hopefully deals with it
+    valid_test_users = stage2_predict[users].unique()
+    stage2_train, stage2_holdout, user_index = split_holdout_data(
+        stage2_region.query(f'{users} in @valid_test_users')
+    )
+    # `split_holdout_data` assigns new index to users =>
+    # need to ensure consistency in user index
+    stage2_predict = reindex(stage2_predict, user_index)
+    return stage1_train, stage2_predict, stage2_train, stage2_holdout
 
 
 def save_data(
@@ -94,21 +119,29 @@ def train_test_split(
         data_root: str = './data/',
         save_files: bool = False
 ):
+    """
+    stage1_train - обучаем первый свд
+    stage2_predict - на этом делаем предсказания с помощью свд и подаем кандидатов в кэтбуст
+    stage2_train - это мапим с кандидатами и обучаем кэтбуст
+    stage2_holdout - это для тюнинга свд+кэтбуст
+
+    final_training - то на чем обучаем финальный свд
+    final_testset - на этом делаем финальный предсказания свд и кэтбуста
+    final_holdout - на этом считаем финальные метрики
+    """
     logger.info("start split dataset")
 
     mldata = get_movielens_data(dataset_path, include_time=True)
 
-    training, test_data, data_index = get_train_test(mldata)
-    testset_2level, holdout_2level = get_holdout(test_data, data_index)
-
-    training1level, test1level = split_data(training)
-    testset_1level, holdout_1level = get_holdout(test1level, data_index)
+    final_training, final_test_data, data_index = split_train_test_data(mldata)
+    final_testset, final_holdout, _ = split_holdout_data(final_test_data)
+    stage1_train, stage2_predict, stage2_train, stage2_holdout = split_stage_data(final_training)
 
     if save_files:
-        save_data(training, testset_2level, holdout_2level, data_root, 2)
-        save_data(training1level, testset_1level, holdout_1level, data_root, 1)
+        save_data(stage2_train, stage2_predict, stage2_holdout, data_root, 2)
+        save_data(stage1_train, final_testset, final_holdout, data_root, 1)
 
     logger.success("end split dataset")
 
-    return training1level, testset_1level, holdout_1level, \
-           training, testset_2level, holdout_2level
+    return stage1_train, stage2_predict, stage2_train, stage2_holdout,\
+           final_training, final_testset, final_holdout
