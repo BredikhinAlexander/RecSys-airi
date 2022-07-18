@@ -1,5 +1,3 @@
-re_split_data: True
-
 dataset:
   dataset_path: './data/data.zip'
   data_root: './data/'
@@ -22,3 +20,16 @@ SASRec:
   num_epoch: 60
   model_save_path: './data/SASRec/SASRec.pt'
   device: 'cpu'
+
+TensorModel:
+  core_shape: 70
+  n_ratings: 10
+  num_iters: 5
+  rating_plus: [8, 9]
+  rating_minus: [0, 1]
+
+EASEModel:
+  reg_weight: 367
+
+optuna:
+  num_params: 50
