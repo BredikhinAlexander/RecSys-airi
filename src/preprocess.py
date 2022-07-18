@@ -1,5 +1,3 @@
-from typing import Tuple, Dict
-
 import numpy as np
 import pandas as pd
 from loguru import logger
@@ -119,16 +117,6 @@ def train_test_split(
         data_root: str = './data/',
         save_files: bool = False
 ):
-    """
-    stage1_train - обучаем первый свд
-    stage2_predict - на этом делаем предсказания с помощью свд и подаем кандидатов в кэтбуст
-    stage2_train - это мапим с кандидатами и обучаем кэтбуст
-    stage2_holdout - это для тюнинга свд+кэтбуст
-
-    final_training - то на чем обучаем финальный свд
-    final_testset - на этом делаем финальный предсказания свд и кэтбуста
-    final_holdout - на этом считаем финальные метрики
-    """
     logger.info("start split dataset")
 
     mldata = get_movielens_data(dataset_path, include_time=True)

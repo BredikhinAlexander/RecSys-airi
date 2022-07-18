@@ -122,6 +122,9 @@ outputs/
 # data
 /data
 
+# catboost info
+/catboost_info
+
 #support files
 *.ru
 *.tex

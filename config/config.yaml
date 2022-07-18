@@ -1,5 +1,3 @@
-re_split_data: True
-
 dataset:
   dataset_path: './data/data.zip'
   data_root: './data/'
@@ -24,7 +22,7 @@ SASRec:
   device: 'cpu'
 
 TensorModel:
-  core_shape: [70, 70, 5]
+  core_shape: 70
   n_ratings: 10
   num_iters: 5
   rating_plus: [8, 9]
@@ -32,3 +30,6 @@ TensorModel:
 
 EASEModel:
   reg_weight: 367
+
+optuna:
+  num_params: 50

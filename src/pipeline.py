@@ -1,11 +1,12 @@
-from typing import Dict
+from typing import Dict, Tuple, List, Union
 
 import numpy as np
 import pandas as pd
 from catboost import CatBoostClassifier
+from loguru import logger
+from tqdm import tqdm
 
 from src import EASEModel, TensorModel
-from src.metrics import topn_recommendations
 
 
 class TwoLevelRecSystem:
@@ -23,34 +24,47 @@ class TwoLevelRecSystem:
         ease_scores, tensor_scores = self.predict_first_level_model(stage2_predict)
         cb_data = self.prepare_data_for_second_level(stage2_train, ease_scores, tensor_scores)
 
+        logger.debug("Start fit catboost")
         self.cat_boost.fit(
             X=cb_data[self.features],
             y=cb_data["target"],
             verbose=False,
         )
+        logger.debug("Finish fit catboost")
 
     def fit_first_level_model(self, stage1_train: pd.DataFrame):
+        logger.debug("Start fit ease model")
         ease_data = self.ease_model.load_train_data(stage1_train,
                                                     shape_matrix=(max(stage1_train.userid) + 1, self.n_items))
         self.ease_model.fit(ease_data)
+        logger.debug("Finish fit ease model")
+        logger.debug("Start fit tensor model")
         self.tensor_model.fit(stage1_train)
+        logger.debug("Finish fit tensor model")
 
-    def predict(self, test: pd.DataFrame):
+    def predict(self, test: pd.DataFrame, top_n: int = 10) -> List:
         ease_scores, tensor_scores = self.predict_first_level_model(test)
         cb_data = self.prepare_data_for_second_level(test, ease_scores, tensor_scores)
 
-        scores_users = self.cat_boost.predict_proba(cb_data)[:, 1]#.reshape(-1, 200)
-        return scores_users
+        scores_users = self.cat_boost.predict_proba(cb_data[self.features])[:, 1]
+        recommend = []
+        for user in tqdm(cb_data.userid.unique()):
+            user_ind = cb_data[cb_data['userid'] == user].index
+            cur_user_scores = scores_users[user_ind]
+            cur_user_items = cb_data.movieid[user_ind].values
+            best_scores_ind = np.argsort(cur_user_scores)[::-1][:top_n]
+            recommend.append(cur_user_items[best_scores_ind])
+        return recommend
 
-    def predict_first_level_model(self, stage2_predict):
-        ease_test = self.ease_model.load_train_data(stage2_predict,
-                                                    shape_matrix=(max(stage2_predict.userid) + 1, self.n_items))
+    def predict_first_level_model(self, test: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
+        ease_test = self.ease_model.load_train_data(test,
+                                                    shape_matrix=(max(test.userid) + 1, self.n_items))
         ease_scores = self.ease_model.predict(ease_test.toarray())
 
-        tensor_scores = self.tensor_model.get_recommendation(stage2_predict)
+        tensor_scores = self.tensor_model.get_recommendation(test)
         return ease_scores, tensor_scores
 
-    def prepare_data_for_second_level(self, test, ease_scores, tensor_scores):
+    def prepare_data_for_second_level(self, test, ease_scores, tensor_scores) -> pd.DataFrame:
         num_users = int(test.userid.nunique())
 
         ease_candidates = self.make_candidates(ease_scores, num_users, 'ease')
@@ -66,10 +80,8 @@ class TwoLevelRecSystem:
         return cb_data
 
     @staticmethod
-    def get_metrics(scores, holdout):
-        recommended_items = topn_recommendations(scores)
-        n_test_users = recommended_items.shape[0]
-        rec = np.take(holdout.movieid.values.reshape(-1, 200), recommended_items)
+    def get_metrics(rec: Union[np.ndarray, List], holdout: pd.DataFrame) -> Tuple[float, float]:
+        n_test_users = len(rec)
         hr = np.any(rec == holdout.movieid.values.reshape(-1, 1), axis=1).mean()
         mrr = np.sum(np.where(rec == holdout.movieid.values.reshape(-1, 1))[1] + 1) / n_test_users
         return hr, mrr

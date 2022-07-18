@@ -7,8 +7,6 @@ from loguru import logger
 
 from src import TwoLevelRecSystem
 
-CUST_ID_COL = 'userid'
-
 
 def parse_params(hyperparameters: Dict):
     CatBoostParams = {"depth", "min_child_samples", "n_estimators", "subsample", "colsample_bylevel", "reg_lambda"}
@@ -25,6 +23,7 @@ def tune_params_and_fit(
         to_predict: pd.DataFrame,
         test: pd.DataFrame,
         holdout: pd.DataFrame,
+        n_items: int,
         num_params=10,
 ):
     # define a search space
@@ -39,7 +38,7 @@ def tune_params_and_fit(
         # TensorModel params
         "core_shape": hp.randint("core_shape", 50, 150),
         # EASEModel params
-        "reg_weight": hp.randint("core_shape", 100, 500)
+        "reg_weight": hp.randint("reg_weight", 100, 500)
     }
 
     best = fmin(
@@ -49,6 +48,7 @@ def tune_params_and_fit(
             to_predict=to_predict.copy(),
             test=test.copy(),
             holdout=holdout.copy(),
+            n_items=n_items
         ),
         space,
         algo=tpe.suggest,
@@ -61,7 +61,6 @@ def tune_params_and_fit(
     best["colsample_bylevel"] /= 10
 
     logger.info(f"The Best set of params is found. They are: {str(best)}")
-    n_items = max(train.movieid) + 1
     ease_param_best, tensor_param_best, catboost_param_best = parse_params(best)
     model = TwoLevelRecSystem(n_items, ease_param_best, tensor_param_best, catboost_param_best)
     model.fit(train, to_predict, test)
@@ -71,10 +70,11 @@ def tune_params_and_fit(
 
 def objective(
         hyperparameters: Dict,
-        train,
-        test,
-        to_predict,
-        holdout,
+        train: pd.DataFrame,
+        to_predict: pd.DataFrame,
+        test: pd.DataFrame,
+        holdout: pd.DataFrame,
+        n_items: int
 ) -> float:
     """
     Функция по заданным гиперпараметрам считает скор по кросс-валидации с n_splits и возвращает его
@@ -82,12 +82,12 @@ def objective(
     hyperparameters["subsample"] /= 10
     hyperparameters["colsample_bylevel"] /= 10
 
-    n_items = max(train.movieid) + 1
     ease_param_best, tensor_param_best, catboost_param_best = parse_params(hyperparameters)
     model = TwoLevelRecSystem(n_items, ease_param_best, tensor_param_best, catboost_param_best)
     model.fit(train, to_predict, test)
-    scores = model.predict(test)
-    hr, mrr = model.get_metrics(scores, holdout)
+    to_predict_test = pd.concat([to_predict, test], axis=0, ignore_index=True, copy=False)
+    recommend = model.predict(to_predict_test)
+    hr, mrr = model.get_metrics(recommend, holdout)
     hyperparameters["metric"] = hr
     logger.info(str(hyperparameters))
 
